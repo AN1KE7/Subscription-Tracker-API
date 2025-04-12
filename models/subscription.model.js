@@ -17,13 +17,14 @@ const subscriptionSchema = new mongoose.Schema({
 
     currency: {
         type:String,
-        enum: ['USD' ,' INR' ,'GBP' , 'EUR'],
+        enum: ['USD' ,'INR' ,'GBP' , 'EUR'],
         default: 'INR'
     },
 
     frequency: {
         type: String,
-        enum: ['daily' ,'weekly','monthly','yearly']
+        enum: ['daily' ,'weekly','monthly','yearly'],
+        required: true
     },
 
     category : {
@@ -32,7 +33,7 @@ const subscriptionSchema = new mongoose.Schema({
         required: true
     },
 
-    PaymentMethod: {
+    paymentMethod: {
         type:String,
         required:true,
         trim:true
@@ -49,16 +50,20 @@ const subscriptionSchema = new mongoose.Schema({
         required :true,
         validate: {
             validator: (value) => value <= new Date(),
-            message : 'Start date msut be in the past'
+            message : 'Start date must be in the past'
         }
     },
 
     renewalDate: {
         type : Date,
-        required :true,
         validate: {
-            validator: (value) => {return value > this.startDate},
-            message : 'Renewal date must be after the start date',
+            validator: function(value) {
+                if (value) {
+                    return value > this.startDate;
+                }
+                return true;
+            },
+            message : 'Renewal date must be after the start date'
         }
     },
 
@@ -68,29 +73,35 @@ const subscriptionSchema = new mongoose.Schema({
         required: true,
         index: true
     }
-} , {timestamps:true} );
+} , { timestamps: true });
 
-
-//  AUTO CALCULATE THE RENEWAL DATE IF MISSING 
-
+// AUTO CALCULATE THE RENEWAL DATE IF MISSING 
 subscriptionSchema.pre('save' , function (next) {
     if (!this.renewalDate) {
-        const renewalPeriods = {
-            daily: 1,
-            weekly: 7,
-            monthly: 30,
-            yearly: 365,
-        };
+        const startDate = new Date(this.startDate);
+        const renewalDate = new Date(startDate);
 
-        this.renewalDate = new Date(this.startDate);
-        this.renewalDate.setDate(this.renewalDate.getDate() + renewalPeriods[this.frequency]);
+        switch(this.frequency) {
+            case 'daily':
+                renewalDate.setDate(startDate.getDate() + 1);
+                break;
+            case 'weekly':
+                renewalDate.setDate(startDate.getDate() + 7);
+                break;
+            case 'monthly':
+                renewalDate.setMonth(startDate.getMonth() + 1);
+                break;
+            case 'yearly':
+                renewalDate.setFullYear(startDate.getFullYear() + 1);
+                break;
+        }
 
+        this.renewalDate = renewalDate;
     }
 
     // AUTO UPDATE THE STATUS IF RENEWAL DATE HAS PASSED 
-
     if (this.renewalDate < new Date()) {
-        this.status = 'expired' ;
+        this.status = 'expired';
     }
 
     next();
@@ -98,5 +109,4 @@ subscriptionSchema.pre('save' , function (next) {
 
 const Subscription = mongoose.model('Subscription' , subscriptionSchema);
 
-
-export default Subscription ;
+export default Subscription;
